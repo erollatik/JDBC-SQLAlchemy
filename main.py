@@ -1,25 +1,29 @@
 import os
 import cx_Oracle
-
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import re
+from dotenv import load_dotenv
 
+load_dotenv()
 
 # SQLAlchemy Base
 Base = declarative_base()
 
-lib_dir = "/System/Volumes/Data/Users/erolatik/Desktop/instantclient"
+# Oracle Instant Client location
+lib_dir = os.getenv("ORACLE_CLIENT_LIB_DIR")
 
 os.environ["LD_LIBRARY_PATH"] = f"{lib_dir}:{os.environ.get('LD_LIBRARY_PATH', '')}"
 
+# Oracle Client start
 if os.path.isdir(lib_dir):
     cx_Oracle.init_oracle_client(lib_dir=lib_dir)
-    print("Oracle client başarıyla başlatıldı.")
+    print("Oracle client started.")
 else:
     raise Exception(f"Oracle client directory not found: {lib_dir}")
 
+# User model
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
@@ -27,11 +31,13 @@ class User(Base):
     email = Column(String(255))
 
 
-# Abstract
+# Abstract class
 class DatabaseConnector:
     def connect(self, jdbc_string):
         raise NotImplementedError("Subclass must implement abstract method")
 
+
+# Oracle Connector
 class OracleConnector(DatabaseConnector):
     def connect(self, jdbc_string):
         pattern = r"oracle\+cx_oracle://(\w+):(\w+)@([\w.]+):(\d+)/(?:\?service_name=)?([\w]+)"
@@ -49,6 +55,8 @@ class OracleConnector(DatabaseConnector):
         else:
             raise ValueError("Invalid Oracle JDBC string format")
 
+
+# MSSQL Connector
 class MSSQLConnector(DatabaseConnector):
     def connect(self, jdbc_string):
         pattern = r"mssql://([\w\d]+):([^@]+)@([\w.]+):(\d+)/([\w\d]+)"
@@ -62,6 +70,7 @@ class MSSQLConnector(DatabaseConnector):
             return Session()
         else:
             raise ValueError("Invalid MSSQL JDBC string format")
+
 
 # PostgreSQL Connector
 class PostgresConnector(DatabaseConnector):
@@ -111,58 +120,53 @@ class ConnectionFactory:
             raise ValueError(f"Unsupported database type: {db_type}")
 
 
-# JDBC bağlantı dizesi
-jdbc_postgres = "postgresql://postgres:your_password@localhost:5432/mydatabase"
-jdbc_mysql = "mysql://user:password@localhost:3306/mydatabase"
-jdbc_mssql = "mssql://sa:YourStrongPassword!@localhost:1433/mydatabase"
-jdbc_oracle = "oracle+cx_oracle://sys:MyPassword123@localhost:1521/?service_name=ORCLPDB1&mode=SYSDBA"
+# JDBC connection - .env
+jdbc_postgres = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
+jdbc_mysql = f"mysql://{os.getenv('MYSQL_USER')}:{os.getenv('MYSQL_PASSWORD')}@{os.getenv('MYSQL_HOST')}:{os.getenv('MYSQL_PORT')}/{os.getenv('MYSQL_DB')}"
+jdbc_mssql = f"mssql://{os.getenv('MSSQL_USER')}:{os.getenv('MSSQL_PASSWORD')}@{os.getenv('MSSQL_HOST')}:{os.getenv('MSSQL_PORT')}/{os.getenv('MSSQL_DB')}"
+jdbc_oracle = f"oracle+cx_oracle://{os.getenv('ORACLE_USER')}:{os.getenv('ORACLE_PASSWORD')}@{os.getenv('ORACLE_HOST')}:{os.getenv('ORACLE_PORT')}/?service_name={os.getenv('ORACLE_SERVICE_NAME')}"
 
 
-# PostgreSQL bağlantısı
+# PostgreSQL connection
 postgres_session = ConnectionFactory.get_connector("postgresql", jdbc_postgres)
-print(f"PostgreSQL Bağlantısı: {postgres_session}")
+print(f"PostgreSQL Connection: {postgres_session}")
 
-# MySQL bağlantısı
+# MySQL connection
 mysql_session = ConnectionFactory.get_connector("mysql", jdbc_mysql)
-print(f"MySQL Bağlantısı: {mysql_session}")
+print(f"MySQL Connection: {mysql_session}")
 
+# MSSQL connection
 mssql_session = ConnectionFactory.get_connector("mssql", jdbc_mssql)
-print(f"MSSQL Bağlantısı: {mssql_session}")
+print(f"MSSQL Connection: {mssql_session}")
 
+# Oracle connection
 oracle_session = ConnectionFactory.get_connector("oracle", jdbc_oracle)
-print("Oracle Bağlantısı: {oracle_session}")
+print(f"Oracle Connection: {oracle_session}")
 
-# PostgreSQL ve MySQL için tablolar
+# Database tables
 Base.metadata.create_all(postgres_session.get_bind())
 Base.metadata.create_all(mysql_session.get_bind())
 Base.metadata.create_all(mssql_session.get_bind())
 Base.metadata.create_all(oracle_session.get_bind())
 
-
-# PostgreSQL veritabanından verileri sorgulama
+# Query
 postgres_users = postgres_session.query(User).all()
 for user in postgres_users:
-    print(f"PostgreSQL Kullanıcı: {user.name} - {user.email}")
+    print(f"PostgreSQL user: {user.name} - {user.email}")
 
-# MySQL veritabanından verileri sorgulama
 mysql_users = mysql_session.query(User).all()
 for user in mysql_users:
-    print(f"MySQL Kullanıcı: {user.name} - {user.email}")
+    print(f"MySQL user: {user.name} - {user.email}")
 
 mssql_users = mssql_session.query(User).all()
 for user in mssql_users:
-    print(f"MSSQL Kullanıcı: {user.name} - {user.email}")
+    print(f"MSSQL user: {user.name} - {user.email}")
 
 oracle_users = oracle_session.query(User).all()
 for user in oracle_users:
-    print(f"Oracle kullanıcı: {user.name} - {user.email}")
+    print(f"Oracle user: {user.name} - {user.email}")
 
-# Oturumları kapatma
-postgres_session.close() # psql -U postgres -h localhost -d mydatabase
-
-mysql_session.close() # mysql -u user -p -h localhost -D mydatabase
-# password
-
-mssql_session.close() # sqlcmd -S localhost -U sa -P YourStrongPassword! -d mydatabase
-
+postgres_session.close()
+mysql_session.close()
+mssql_session.close()
 oracle_session.close()
